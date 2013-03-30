@@ -73,9 +73,9 @@ namespace Bin2Xml
                 fsin.Seek(-16, SeekOrigin.End);
 
                 byte[] data = new byte[16];
+                long internalIdAddress = fsin.Position;
                 fsin.Read(data, 0, 16);
                 string internalIdString = "unknown";
-                long internalIdAddress = fsin.Position;
                 // find start
                 int iStart = 0;
                 for (iStart = 0; iStart != 16; ++iStart)
