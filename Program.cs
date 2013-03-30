@@ -12,8 +12,6 @@ namespace Bin2Xml
         static uint ECU_FlashCode_End    = 0x1FFFF;
         static uint ECU_RAM_Start        = 0x20000;
         static uint ECU_RAM_End          = 0x27FFF;
-        static uint ECU_FlashData_Start  = 0x28000;
-        static uint ECU_FlashData_End    = 0x2FFFF;
 
         public enum MAPTYPE { MAP2D = 1, MAP3D };
 
@@ -27,10 +25,29 @@ namespace Bin2Xml
 
         static void Main(string[] args)
         {
+            uint ECU_FlashData_Start  = 0x28000; //0x2A544
+            uint ECU_FlashData_End    = 0x2FFFF;
+
             Console.WriteLine("Denso ECU map lookup table to Enginuity xml format converter");
+            Console.WriteLine("");
+            Console.Write("Enter starting address (default = 0x{0:X8}): ", ECU_FlashData_Start);
+            string sAddress = Console.ReadLine();
+            if (sAddress.Length > 0)
+            {
+                if (sAddress.StartsWith("0x"))
+                {
+                    ECU_FlashData_Start = (uint)Convert.ToInt32(sAddress.Substring(2), 16);
+                }
+                else
+                {
+                    ECU_FlashData_Start = UInt32.Parse(sAddress);
+                }
+            }
 
             string IN_FILE = args[0];
             string OUT_FILE = IN_FILE.Replace(".bin", "") + ".xml";
+
+            FileInfo fi = new FileInfo(IN_FILE);
 
             uint startAddress = ECU_FlashData_Start; // default start address
 
@@ -50,18 +67,41 @@ namespace Bin2Xml
             
             tout.WriteLine("");
 
+            // Read end
+            fsin.Seek(-16, SeekOrigin.End);
+
+            byte[] data = new byte[16];
+            fsin.Read(data, 0, 16);
+            long internalIdAddress = fsin.Position;
+            // find start
+            int iStart = 0;
+            for (iStart = 0; iStart != 16; ++iStart)
+            {
+                if (data[iStart] != 255) break;
+            }
+            // find end
+            int iEnd = iStart;
+            for (; iEnd != 16; ++iEnd)
+            {
+                if (data[iEnd] == 255) break;
+            }
+            string internalIdString = System.Text.Encoding.ASCII.GetString(data, iStart, iEnd-iStart-2);
+            internalIdAddress += iStart;
+
+            fsin.Seek(n, SeekOrigin.Begin);
+
             tout.WriteLine("  <romid>");
-            tout.WriteLine("   <xmlid>XXX</xmlid>");
+            tout.WriteLine("   <xmlid>{0}</xmlid>", fi.Name.Replace(".bin", ""));
             tout.WriteLine("   <make>XXX</make>");
             tout.WriteLine("   <model>XXX</model>");
             tout.WriteLine("   <submodel>XXX</submodel>");
             tout.WriteLine("   <year>01/01</year>");
-            tout.WriteLine("   <market>XXXX</market>");
-            tout.WriteLine("   <transmission>XX</transmission>");
+            tout.WriteLine("   <market>USDM</market>");
+            tout.WriteLine("   <transmission>MT</transmission>");
             tout.WriteLine("   <memmodel>SH7052</memmodel>");
-            tout.WriteLine("   <internalidstring>XXXXX-XXXX</internalidstring>");
-            tout.WriteLine("   <internalidaddress>0xXXXXX</internalidaddress>");
-            tout.WriteLine("   <filesize>256kb</filesize>");
+            tout.WriteLine("   <internalidstring>{0}</internalidstring>", internalIdString);
+            tout.WriteLine("   <internalidaddress>{0:X8}</internalidaddress>", internalIdAddress);
+            tout.WriteLine("   <filesize>{0}kb</filesize>", fi.Length / 1024);
             tout.WriteLine("  </romid>");
             tout.WriteLine("");
 
@@ -76,47 +116,32 @@ namespace Bin2Xml
             do
             {
 
-                // x = getbyte(n)
                 x = bin.ReadByte();
 
-                //IF x < 16 THEN          '2D map
                 if (x<16) {     // 2D map
                     mapType = MAPTYPE.MAP2D;
-                    // Xlen$ = STR$(getbyte(n + 1)): Xlen$ = RIGHT$(Xlen$, (LEN(Xlen$) - 1))
                     Xlen = bin.ReadByte();
                     // skip next 2 bytes
                     bin.ReadByte();
                     bin.ReadByte();
-                    // Xaddr$ = getlong$(n + 4)
                     Xaddr = swapEndianness(bin.ReadUInt32());
-                    // Maddr$ = getlong$(n + 8)
                     Maddr = swapEndianness(bin.ReadUInt32());
-                    // n = n + 16
                     n += 16;
                     fsin.Seek(n, SeekOrigin.Begin);
-                    // tabletype$ = "2D"
                     m2d++;
                 }
-                // ELSEIF x < 43 THEN                   '3d map
                 else if (x<43)  // 3D map
                 {
                     mapType = MAPTYPE.MAP3D;
-                    // Xlen$ = STR$(getbyte(n + 1)): Xlen$ = RIGHT$(Xlen$, (LEN(Xlen$) - 1))
                     Xlen = bin.ReadByte();
-                    // Ylen$ = STR$(getbyte(n + 2)): Ylen$ = RIGHT$(Ylen$, (LEN(Ylen$) - 1))
                     Ylen = bin.ReadByte();
                     // skip next byte
                     bin.ReadByte();
-                    // Xaddr$ = getlong$(n + 4)
                     Xaddr = swapEndianness(bin.ReadUInt32());
-                    // Yaddr$ = getlong$(n + 8)
                     Yaddr = swapEndianness(bin.ReadUInt32());
-                    // Maddr$ = getlong$(n + 12)
                     Maddr = swapEndianness(bin.ReadUInt32());
-                    // n = n + 20
                     n += 20;
                     fsin.Seek(n, SeekOrigin.Begin);
-                    // tabletype$ = "3D"
                     m3d++;
                 }
 
@@ -185,6 +210,11 @@ namespace Bin2Xml
 
             Console.WriteLine("2D maps = {0}", m2d);
             Console.WriteLine("3D maps = {0}", m3d);
+            Console.WriteLine("internalIdString = {0}", internalIdString);
+            Console.WriteLine("internalIdAddress = {0:X8}", internalIdAddress);
+
+            Console.WriteLine("Press any key to continue.");
+            ConsoleKeyInfo keyInfo = Console.ReadKey();
 
             bin.Close();
         }
